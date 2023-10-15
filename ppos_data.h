@@ -26,6 +26,11 @@ typedef struct task_t
 
    // ... (outros campos deve ser adicionados APOS esse comentario)
    
+   unsigned int running_time;
+   unsigned int running_ticks;
+
+   int priority;
+   
 } task_t ;
 
 // estrutura que define um semáforo

@@ -1,13 +1,19 @@
 #include "ppos.h"
 #include "ppos-core-globals.h"
-
+#include <signal.h>
+#include <sys/time.h>
 
 // ****************************************************************************
 // Coloque aqui as suas modificações, p.ex. includes, defines variáveis, 
 // estruturas e funções
 #include <time.h>
 
+void update_task_metrics(task_t* task);
+void setup_timer();
+
 time_t globalClock;
+
+unsigned int tick_aux = 0;
 
 // ****************************************************************************
 
@@ -16,6 +22,8 @@ time_t globalClock;
 void before_ppos_init () {
     // put your customization here
     globalClock = clock();
+
+    setup_timer();
 
 #ifdef DEBUG
     printf("\ninit - BEFORE");
@@ -38,6 +46,7 @@ void before_task_create (task_t *task ) {
 
 void after_task_create (task_t *task ) {
     // put your customization here
+
 #ifdef DEBUG
     printf("\ntask_create - AFTER - [%d]", task->id);
 #endif
@@ -402,11 +411,28 @@ int after_mqueue_msgs (mqueue_t *queue) {
 
 task_t * scheduler() {
     // FCFS scheduler
+
     if ( readyQueue != NULL ) {
         return readyQueue;
     }
 
     return NULL;
+}
+
+void task_setprio(task_t* task, int priority)
+{
+    if (task == NULL)
+        taskExec->priority = priority;
+
+    task->priority = priority;
+}
+
+int task_getprio(task_t* task)
+{
+    if (task == NULL)
+        return taskExec->priority;
+
+    return task->priority;
 }
 
 void task_set_eet (task_t *task, int et)
@@ -416,15 +442,67 @@ void task_set_eet (task_t *task, int et)
 
 int task_get_eet(task_t *task)
 {
-    return 20;
+
 }
 
 int task_get_ret(task_t *task)
 {
-    return task_get_eet(task) - task->executionTime;
+   
 }
 
-unsigned int systime ()
+void interrupt_handler()
 {
+    printf("interrompido");
+    if(taskExec->running_ticks == 20)
+    {
+        // coloca a tarefa na fila de prontas novamente
 
+         readyQueue->next = taskExec;
+
+        // devolve o processador para o dispatcher
+
+        taskExec = taskDisp;
+    }
+    else
+    {
+        update_task_metrics(taskExec);
+    }
+    
+}
+
+void update_task_metrics(task_t* task)
+{
+    // atualizar métricas da task
+}
+
+void setup_timer()
+{
+    // estrutura que define um tratador de sinal (deve ser global ou static)
+    struct sigaction action ;
+
+    // estrutura de inicialização to timer
+    struct itimerval timer ;
+
+    // registra a ação para o sinal de timer SIGALRM
+    action.sa_handler = interrupt_handler ;
+    sigemptyset (&action.sa_mask) ;
+    action.sa_flags = 0 ;
+    if (sigaction (SIGALRM, &action, 0) < 0)
+    {
+        perror ("Erro em sigaction: ") ;
+        exit (1) ;
+    }
+
+    // ajusta valores do temporizador
+    timer.it_value.tv_usec = 0 ;      // primeiro disparo, em micro-segundos
+    timer.it_value.tv_sec  = 1 ;      // primeiro disparo, em segundos
+    timer.it_interval.tv_usec = 0 ;   // disparos subsequentes, em micro-segundos
+    timer.it_interval.tv_sec  = 1 ;   // disparos subsequentes, em segundos
+
+    // arma o temporizador ITIMER_REAL (vide man setitimer)
+    if (setitimer (ITIMER_REAL, &timer, 0) < 0)
+    {
+        perror ("Erro em setitimer: ") ;
+        exit (1) ;
+    }
 }
