@@ -13,8 +13,6 @@ void setup_timer();
 
 time_t globalClock;
 
-unsigned int tick_aux = 0;
-
 // ****************************************************************************
 
 
@@ -32,6 +30,9 @@ void before_ppos_init () {
 
 void after_ppos_init () {
     // put your customization here
+
+    globalClock = 0;
+
 #ifdef DEBUG
     printf("\ninit - AFTER");
 #endif
@@ -82,6 +83,13 @@ void after_task_switch ( task_t *task ) {
 
 void before_task_yield () {
     // put your customization here
+    printf("\nYieldando\n");
+    if(readyQueue == NULL)
+        return;
+    // task_t* last = readyQueue->next;
+    // last->prev = taskExec;
+    // taskExec->next = last;
+    // taskExec->prev = readyQueue;
 #ifdef DEBUG
     printf("\ntask_yield - BEFORE - [%d]", taskExec->id);
 #endif
@@ -412,7 +420,22 @@ int after_mqueue_msgs (mqueue_t *queue) {
 task_t * scheduler() {
     // FCFS scheduler
 
+    printf("\nScheduler\n");
+
+    task_t* queue = readyQueue;
+
+    if(queue == NULL)
+    {
+        printf("\nqueue NULL\n");
+    }
+
+    // task_t* aux = queue->next;
+
+    // printf("\nID %d\n", queue->id);
+
     if ( readyQueue != NULL ) {
+        //printf("\nID NEXT= %d\n", readyQueue->next->id);
+        //printf("\nID PREV = %d\n", readyQueue->prev->id);
         return readyQueue;
     }
 
@@ -437,31 +460,67 @@ int task_getprio(task_t* task)
 
 void task_set_eet (task_t *task, int et)
 {
-
+    if(task != NULL)
+    {
+         task->execution_estimated_time = et;
+         return;
+    }
+    else
+    {
+        taskExec->execution_estimated_time = et;
+    }
 }
 
 int task_get_eet(task_t *task)
 {
-
+    if(task != NULL)
+    {
+        //printf("Returning eet: %d", task->execution_estimated_time);
+        return task->execution_estimated_time;
+    }
+        
+    //printf("Returning eet: %d", taskExec->execution_estimated_time);
+    return taskExec->execution_estimated_time;
 }
 
 int task_get_ret(task_t *task)
 {
-   
+    if(task != NULL)
+        return task->execution_estimated_time - task->running_time;
+
+    return taskExec->execution_estimated_time - taskExec->running_time;
 }
+
+ //taskExec->running_ticks = 0;   
+
+        //taskExec->joinQueue = taskExec;
+
+        // task_t* queue = readyQueue;
+
+        // if(queue == NULL)
+        //     printf("\nqueue NULL\n");
+
+        // while (queue != NULL)
+        // {
+        //     task_t* aux = queue->next;
+
+        //     printf("\nID %d\n", queue->id);
+
+        //     queue = aux;
+        // }
 
 void interrupt_handler()
 {
-    printf("interrompido");
+    systemTime++;
+
     if(taskExec->running_ticks == 20)
     {
+        taskExec->running_ticks = 0;
+       //taskExec = scheduler();
         // coloca a tarefa na fila de prontas novamente
 
-         readyQueue->next = taskExec;
 
         // devolve o processador para o dispatcher
-
-        taskExec = taskDisp;
     }
     else
     {
@@ -473,6 +532,8 @@ void interrupt_handler()
 void update_task_metrics(task_t* task)
 {
     // atualizar métricas da task
+    task->running_ticks++;
+    task->running_time += globalClock;
 }
 
 void setup_timer()
@@ -494,10 +555,10 @@ void setup_timer()
     }
 
     // ajusta valores do temporizador
-    timer.it_value.tv_usec = 0 ;      // primeiro disparo, em micro-segundos
-    timer.it_value.tv_sec  = 1 ;      // primeiro disparo, em segundos
-    timer.it_interval.tv_usec = 0 ;   // disparos subsequentes, em micro-segundos
-    timer.it_interval.tv_sec  = 1 ;   // disparos subsequentes, em segundos
+    timer.it_value.tv_usec = 100 ;      // primeiro disparo, em micro-segundos
+    timer.it_value.tv_sec  = 0 ;      // primeiro disparo, em segundos
+    timer.it_interval.tv_usec = 100 ;   // disparos subsequentes, em micro-segundos
+    timer.it_interval.tv_sec  = 0 ;   // disparos subsequentes, em segundos
 
     // arma o temporizador ITIMER_REAL (vide man setitimer)
     if (setitimer (ITIMER_REAL, &timer, 0) < 0)
