@@ -8,7 +8,10 @@
 // estruturas e funções
 #include <time.h>
 
-void update_task_metrics(task_t* task);
+#define INT_MAX 2147483647
+#define TICK_INTERVAL 1
+
+void update_tasks_metrics();
 void setup_timer();
 
 time_t globalClock;
@@ -47,6 +50,13 @@ void before_task_create (task_t *task ) {
 
 void after_task_create (task_t *task ) {
     // put your customization here
+    if(task == taskDisp)
+        task->isDispatcher = 1;
+    else
+        task->isDispatcher = 0;
+
+    task->processor_time = 0;
+    task->current_processor_time = 0;
 
 #ifdef DEBUG
     printf("\ntask_create - AFTER - [%d]", task->id);
@@ -55,6 +65,7 @@ void after_task_create (task_t *task ) {
 
 void before_task_exit () {
     // put your customization here
+    printf("\nTask %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskExec->id, taskExec->running_time, taskExec->processor_time, 4);
 #ifdef DEBUG
     printf("\ntask_exit - BEFORE - [%d]", taskExec->id);
 #endif
@@ -83,13 +94,6 @@ void after_task_switch ( task_t *task ) {
 
 void before_task_yield () {
     // put your customization here
-    printf("\nYieldando\n");
-    if(readyQueue == NULL)
-        return;
-    // task_t* last = readyQueue->next;
-    // last->prev = taskExec;
-    // taskExec->next = last;
-    // taskExec->prev = readyQueue;
 #ifdef DEBUG
     printf("\ntask_yield - BEFORE - [%d]", taskExec->id);
 #endif
@@ -100,7 +104,6 @@ void after_task_yield () {
     printf("\ntask_yield - AFTER - [%d]", taskExec->id);
 #endif
 }
-
 
 void before_task_suspend( task_t *task ) {
     // put your customization here
@@ -419,23 +422,51 @@ int after_mqueue_msgs (mqueue_t *queue) {
 
 task_t * scheduler() {
     // FCFS scheduler
+    //printf("\nScheduler\n");
 
-    printf("\nScheduler\n");
-
-    task_t* queue = readyQueue;
-
-    if(queue == NULL)
+    if ( readyQueue != NULL )
     {
-        printf("\nqueue NULL\n");
-    }
+        int minor = INT_MAX;
 
-    // task_t* aux = queue->next;
+        task_t* start = readyQueue;
+        task_t* aux = readyQueue;
+        task_t* next = NULL;
 
-    // printf("\nID %d\n", queue->id);
+        // printf("SCHEDULER\n");
+        // printf("TASKEXEC ID = %d // TASKEXEC EET = %d // TASKEXEC RET = %d\n", taskExec->id, taskExec->execution_estimated_time, task_get_ret(taskExec));
+        // printf("READYQUEUE ID = %d // READYQUEUE EET = %d // READYQUEUE RET = %d\n", readyQueue->id, readyQueue->execution_estimated_time, task_get_ret(readyQueue));
+        
 
-    if ( readyQueue != NULL ) {
-        //printf("\nID NEXT= %d\n", readyQueue->next->id);
-        //printf("\nID PREV = %d\n", readyQueue->prev->id);
+        //printf("TASK ID = %d // TASK EET = %d // TASK RET = %d\n", aux->id, aux->execution_estimated_time, task_get_ret(aux));
+        int ret = task_get_ret(aux);
+
+        if(ret < minor && ret > 0)
+        {
+            readyQueue = aux;
+            minor = ret;
+        }
+
+        aux = aux->next;
+
+        while(aux != start)
+        {
+            next = aux->next;
+
+            //printf("TASK ID = %d // TASK EET = %d // TASK RET = %d\n", aux->id, aux->execution_estimated_time, task_get_ret(aux));
+
+            ret = task_get_ret(aux);
+            //printf("Minor = %d\n", minor);
+
+            if(ret < minor && ret > 0)
+            {
+                readyQueue = aux;
+                minor = ret;
+            }
+
+            aux = next;
+        }
+
+        //printf("RETURNED READYQUEUE ID = %d // READYQUEUE EET = %d // READYQUEUE RET = %d\n", readyQueue->id, readyQueue->execution_estimated_time, task_get_ret(readyQueue));
         return readyQueue;
     }
 
@@ -461,79 +492,63 @@ int task_getprio(task_t* task)
 void task_set_eet (task_t *task, int et)
 {
     if(task != NULL)
-    {
-         task->execution_estimated_time = et;
-         return;
-    }
+        task->execution_estimated_time = et;
     else
-    {
         taskExec->execution_estimated_time = et;
-    }
 }
 
 int task_get_eet(task_t *task)
 {
     if(task != NULL)
-    {
-        //printf("Returning eet: %d", task->execution_estimated_time);
         return task->execution_estimated_time;
-    }
         
-    //printf("Returning eet: %d", taskExec->execution_estimated_time);
     return taskExec->execution_estimated_time;
 }
 
 int task_get_ret(task_t *task)
 {
     if(task != NULL)
-        return task->execution_estimated_time - task->running_time;
+        return task->execution_estimated_time - task->running_time * TICK_INTERVAL;
 
-    return taskExec->execution_estimated_time - taskExec->running_time;
+    return taskExec->execution_estimated_time - taskExec->running_time * TICK_INTERVAL;
 }
-
- //taskExec->running_ticks = 0;   
-
-        //taskExec->joinQueue = taskExec;
-
-        // task_t* queue = readyQueue;
-
-        // if(queue == NULL)
-        //     printf("\nqueue NULL\n");
-
-        // while (queue != NULL)
-        // {
-        //     task_t* aux = queue->next;
-
-        //     printf("\nID %d\n", queue->id);
-
-        //     queue = aux;
-        // }
 
 void interrupt_handler()
 {
-    systemTime++;
-
-    if(taskExec->running_ticks == 20)
+    if((taskExec->current_processor_time == 20) && (taskExec->isDispatcher == 0))
     {
-        taskExec->running_ticks = 0;
-       //taskExec = scheduler();
         // coloca a tarefa na fila de prontas novamente
 
-
-        // devolve o processador para o dispatcher
+        taskExec->current_processor_time = 0;
+        
+        task_yield();
     }
     else
     {
-        update_task_metrics(taskExec);
+        taskExec->current_processor_time++;
     }
-    
+        
+    taskExec->processor_time++;
+    taskExec->running_time++; /*Tem que executar para todas as tarefas*/
+    update_tasks_metrics();
+    systemTime++;
 }
 
-void update_task_metrics(task_t* task)
+void update_tasks_metrics()
 {
-    // atualizar métricas da task
-    task->running_ticks++;
-    task->running_time += globalClock;
+    // task_t* start = readyQueue;
+    // task_t* aux = readyQueue;
+    // task_t* next = NULL;
+    
+    // aux->running_time++;
+    // aux = aux->next;
+
+    // while(aux != start)
+    // {
+    //     next = aux->next;
+    //     aux->running_time++;
+    //     aux = next;
+    // }
 }
 
 void setup_timer()

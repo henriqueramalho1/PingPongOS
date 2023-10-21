@@ -44,7 +44,8 @@ void Body (void * arg)
   // foi indicado como seu tempo de execucao
   while (taskExec->running_time < task_get_eet(NULL)) {
     end_time--;
-    if ((last_printed_line+5) <= systime()) {
+    if ((last_printed_line+5) <= systime())
+    {
       printf ("[%d]\t%s: interacao %d\t\t%d\n", systime(), (char *) arg, end_time, taskExec->running_time) ;
       last_printed_line = systime();
     }
