@@ -25,11 +25,11 @@ typedef struct task_t
     unsigned int awakeTime; // used to store the time when it should be waked up
 
     // ... (outros campos deve ser adicionados APOS esse comentario)
-    int isDispatcher;
+    int is_system_task;
 
-    int running_time;
+    int running_time; // tempo que a tarefa tem o processador
     int current_processor_time;
-    int processor_time;
+    int life_time;
 
     int estimated_time;
     int execution_estimated_time;

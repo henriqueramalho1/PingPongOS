@@ -51,12 +51,14 @@ void before_task_create (task_t *task ) {
 void after_task_create (task_t *task ) {
     // put your customization here
     if(task == taskDisp)
-        task->isDispatcher = 1;
+        task->is_system_task = 1;
     else
-        task->isDispatcher = 0;
+        task->is_system_task = 0;
 
-    task->processor_time = 0;
+    // inicialização das variáveis das tarefas
+    task->life_time = 0;
     task->current_processor_time = 0;
+    task->activations = 0;
 
 #ifdef DEBUG
     printf("\ntask_create - AFTER - [%d]", task->id);
@@ -65,7 +67,6 @@ void after_task_create (task_t *task ) {
 
 void before_task_exit () {
     // put your customization here
-    printf("\nTask %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskExec->id, taskExec->running_time, taskExec->processor_time, 4);
 #ifdef DEBUG
     printf("\ntask_exit - BEFORE - [%d]", taskExec->id);
 #endif
@@ -73,6 +74,8 @@ void before_task_exit () {
 
 void after_task_exit () {
     // put your customization here
+    taskExec->activations++;
+    printf("\nTask %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskExec->id, taskExec->life_time, taskExec->running_time, taskExec->activations);
 #ifdef DEBUG
     printf("\ntask_exit - AFTER- [%d]", taskExec->id);
 #endif
@@ -422,22 +425,16 @@ int after_mqueue_msgs (mqueue_t *queue) {
 
 task_t * scheduler() {
     // FCFS scheduler
-    //printf("\nScheduler\n");
 
     if ( readyQueue != NULL )
     {
+        // variável para guardar o menor tempo de execução restante entre as tarefas
         int minor = INT_MAX;
 
         task_t* start = readyQueue;
         task_t* aux = readyQueue;
         task_t* next = NULL;
 
-        // printf("SCHEDULER\n");
-        // printf("TASKEXEC ID = %d // TASKEXEC EET = %d // TASKEXEC RET = %d\n", taskExec->id, taskExec->execution_estimated_time, task_get_ret(taskExec));
-        // printf("READYQUEUE ID = %d // READYQUEUE EET = %d // READYQUEUE RET = %d\n", readyQueue->id, readyQueue->execution_estimated_time, task_get_ret(readyQueue));
-        
-
-        //printf("TASK ID = %d // TASK EET = %d // TASK RET = %d\n", aux->id, aux->execution_estimated_time, task_get_ret(aux));
         int ret = task_get_ret(aux);
 
         if(ret < minor && ret > 0)
@@ -452,10 +449,7 @@ task_t * scheduler() {
         {
             next = aux->next;
 
-            //printf("TASK ID = %d // TASK EET = %d // TASK RET = %d\n", aux->id, aux->execution_estimated_time, task_get_ret(aux));
-
             ret = task_get_ret(aux);
-            //printf("Minor = %d\n", minor);
 
             if(ret < minor && ret > 0)
             {
@@ -466,7 +460,13 @@ task_t * scheduler() {
             aux = next;
         }
 
-        //printf("RETURNED READYQUEUE ID = %d // READYQUEUE EET = %d // READYQUEUE RET = %d\n", readyQueue->id, readyQueue->execution_estimated_time, task_get_ret(readyQueue));
+        // incrementa a variável de ativações somente se a tarefa já passou pelo processador
+        if(readyQueue->running_time > 0)
+        {
+            readyQueue->activations++;
+        }
+        
+        // retorna a tarefa com menor tempo de execução restante
         return readyQueue;
     }
 
@@ -515,12 +515,11 @@ int task_get_ret(task_t *task)
 
 void interrupt_handler()
 {
-    if((taskExec->current_processor_time == 20) && (taskExec->isDispatcher == 0))
+    if((taskExec->current_processor_time == 20) && (taskExec->is_system_task == 0))
     {
         // coloca a tarefa na fila de prontas novamente
 
         taskExec->current_processor_time = 0;
-        
         task_yield();
     }
     else
@@ -528,27 +527,33 @@ void interrupt_handler()
         taskExec->current_processor_time++;
     }
         
-    taskExec->processor_time++;
-    taskExec->running_time++; /*Tem que executar para todas as tarefas*/
+    taskExec->running_time++;
     update_tasks_metrics();
     systemTime++;
 }
 
 void update_tasks_metrics()
 {
-    // task_t* start = readyQueue;
-    // task_t* aux = readyQueue;
-    // task_t* next = NULL;
-    
-    // aux->running_time++;
-    // aux = aux->next;
+    taskExec->life_time++;   
 
-    // while(aux != start)
-    // {
-    //     next = aux->next;
-    //     aux->running_time++;
-    //     aux = next;
-    // }
+    task_t* start = readyQueue;
+    task_t* aux = readyQueue;
+    task_t* next = NULL;
+
+    if(aux == NULL)
+    {
+        return;
+    }
+        
+    aux->life_time++;
+    aux = aux->next;
+
+    while(aux != start)
+    {
+        next = aux->next;
+        aux->life_time++;
+        aux = next;
+    }
 }
 
 void setup_timer()
@@ -570,9 +575,9 @@ void setup_timer()
     }
 
     // ajusta valores do temporizador
-    timer.it_value.tv_usec = 100 ;      // primeiro disparo, em micro-segundos
+    timer.it_value.tv_usec = 1000 ;      // primeiro disparo, em micro-segundos
     timer.it_value.tv_sec  = 0 ;      // primeiro disparo, em segundos
-    timer.it_interval.tv_usec = 100 ;   // disparos subsequentes, em micro-segundos
+    timer.it_interval.tv_usec = 1000 ;   // disparos subsequentes, em micro-segundos
     timer.it_interval.tv_sec  = 0 ;   // disparos subsequentes, em segundos
 
     // arma o temporizador ITIMER_REAL (vide man setitimer)
