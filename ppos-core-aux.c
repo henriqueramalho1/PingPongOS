@@ -418,7 +418,6 @@ int after_mqueue_msgs (mqueue_t *queue) {
 
 task_t * scheduler() {
     // FCFS scheduler
-
     if ( readyQueue != NULL )
     {
         // variável para guardar o menor tempo de execução restante entre as tarefas

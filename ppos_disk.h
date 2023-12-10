@@ -16,6 +16,8 @@
 typedef struct
 {
   // completar com os campos necessarios
+  int current_position;
+  int last_position;
 } disk_t ;
 
 typedef struct disk_duty

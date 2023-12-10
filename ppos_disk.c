@@ -18,7 +18,7 @@ void print_queue(task_t* queue);
 
 disk_t main_disk;
 task_t disk_manager_task;
-mutex_t mutex;
+semaphore_t s;
 task_t* disk_wait_queue;
 disk_duty_queue_t disk_duty_queue;
 
@@ -43,12 +43,15 @@ int disk_mgr_init (int *numBlocks, int *blockSize)
 
     *blockSize = disk_block_size;
 
+    main_disk.current_position = 0;
+    main_disk.last_position = 0;
+
     signal(SIGUSR1, disk_signal_handler);
 
     task_create(&disk_manager_task, disk_task_body, NULL);
     task_suspend(&disk_manager_task, NULL);
 
-    mutex_create(&mutex);
+    sem_create(&s, 1);
 
     return 0;
 }
@@ -56,12 +59,12 @@ int disk_mgr_init (int *numBlocks, int *blockSize)
 int disk_block_read (int block, void *buffer)
 {
     //printf("Solicitou disco\n");
-    mutex_lock(&mutex);
+    sem_down(&s);
 
     disk_duty_t* duty = create_duty(taskExec, block, buffer, 0);
     insert_duty(duty);
 
-    mutex_unlock(&mutex);
+    sem_up(&s);
 
     task_resume(&disk_manager_task);
     
@@ -69,6 +72,8 @@ int disk_block_read (int block, void *buffer)
     task_yield();
 
     //printf("Resumed task and copying buffer\n");
+
+    main_disk.current_position = duty->block;
 
     memcpy(buffer,duty->buffer, 64);
 
@@ -79,16 +84,18 @@ int disk_block_read (int block, void *buffer)
 
 int disk_block_write (int block, void *buffer)
 {
-    mutex_lock(&mutex);
+    sem_down(&s);
 
     disk_duty_t* duty = create_duty(taskExec, block, buffer, 1);
     insert_duty(duty);
 
-    mutex_unlock(&mutex);
+    sem_up(&s);
 
     task_resume(&disk_manager_task);
     task_suspend(taskExec, &disk_wait_queue);
     task_yield();
+
+    main_disk.current_position = duty->block;
 
     free(duty);
 
@@ -99,19 +106,20 @@ void disk_task_body()
 {
     while(true)
     {
+        
         //printf("Gerente de disco\n");
         if(disk_manager_task.awake_by_disk == 1)
         {
             //printf("Gerente de disco recebeu um sinal do disco\n");
-            task_resume(disk_wait_queue);
             disk_manager_task.awake_by_disk = 0;
+            task_resume(disk_wait_queue);
         }
 
         if(disk_duty_queue.head != NULL)
         {
-            mutex_lock(&mutex);
-            disk_duty_t* duty = escalonate(0);
-            mutex_unlock(&mutex);
+            sem_down(&s);
+            disk_duty_t* duty = escalonate(2);
+            sem_up(&s);
             
             if(duty->operation == 0)
             {
@@ -179,6 +187,144 @@ disk_duty_t* escalonate(int option)
         //print_duty_queue();
 
         return duty;
+    }
+    else if(option == 1)
+    {
+        printf("SSTF\n");
+        int minor_distance = 9999;
+
+        disk_duty_t* next_duty = NULL;
+
+        disk_duty_t* start = disk_duty_queue.head;
+        disk_duty_t* aux = start;
+        disk_duty_t* next = NULL;
+
+        if(start == NULL)
+            return NULL;
+
+        //printf("Getting next\n");
+
+        if(aux->next == NULL)
+        {
+            disk_duty_queue.head = NULL;
+
+            return aux;
+        }
+
+        aux = aux->next;
+
+        while(aux != NULL)
+        {
+            next = aux->next;
+            int distance = abs(main_disk.current_position - aux->block);
+            
+            if(distance < minor_distance)
+            {
+                next_duty = aux;
+                minor_distance = distance;
+            }
+
+            aux = next;
+        }
+
+        disk_duty_queue.head->next->prev = NULL;
+        disk_duty_queue.head = disk_duty_queue.head->next;
+
+        task_t* duty_owner = next_duty->owner;
+
+        disk_wait_queue->prev = duty_owner;
+        duty_owner->next = disk_wait_queue;
+        disk_wait_queue = duty_owner;
+        disk_wait_queue->prev = NULL;
+
+        return next_duty;
+    }
+    else if(option == 2)
+    {
+        printf("CSCAN\n");
+
+        int minor_distance = 9999;
+
+        disk_duty_t* next_duty = NULL;
+
+        disk_duty_t* start = disk_duty_queue.head;
+        disk_duty_t* aux = start;
+        disk_duty_t* next = NULL;
+
+        if(start == NULL)
+            return NULL;
+
+        //printf("Getting next\n");
+
+        if(aux->next == NULL)
+        {
+            disk_duty_queue.head = NULL;
+
+            return aux;
+        }
+
+        aux = aux->next;
+
+        while(aux != NULL)
+        {
+            next = aux->next;
+            int distance = abs(main_disk.current_position - aux->block);
+            
+            if(distance < minor_distance && aux->block > main_disk.current_position)
+            {
+                next_duty = aux;
+                minor_distance = distance;
+            }
+
+            aux = next;
+        }
+
+        if(next_duty == NULL)
+        {
+            int minor = 9999;
+
+            disk_duty_t* start = disk_duty_queue.head;
+            disk_duty_t* aux = start;
+            disk_duty_t* next = NULL;
+
+            if(start == NULL)
+                return NULL;
+
+            if(aux->next == NULL)
+            {
+                disk_duty_queue.head = NULL;
+
+                return aux;
+            }
+
+            aux = aux->next;
+
+            while(aux != NULL)
+            {
+                next = aux->next;
+                
+                if(aux->block < minor)
+                {
+                    next_duty = aux;
+                    minor = aux->block;
+                }
+
+                aux = next;
+            }
+        }
+
+        disk_duty_queue.head->next->prev = NULL;
+        disk_duty_queue.head = disk_duty_queue.head->next;
+
+        task_t* duty_owner = next_duty->owner;
+
+        disk_wait_queue->prev = duty_owner;
+        duty_owner->next = disk_wait_queue;
+        disk_wait_queue = duty_owner;
+        disk_wait_queue->prev = NULL;
+
+        return next_duty;
+
     }
 }
 
