@@ -6,24 +6,19 @@
 // ****************************************************************************
 // Coloque aqui as suas modificações, p.ex. includes, defines variáveis, 
 // estruturas e funções
-#include <time.h>
 
 #define INT_MAX 2147483647
 #define TICK_INTERVAL 1
 
 void update_tasks_metrics();
 void setup_timer();
-
-time_t globalClock;
-
+int task_get_ret(task_t *task);
 // ****************************************************************************
 
 
 
 void before_ppos_init () {
     // put your customization here
-    globalClock = clock();
-
     setup_timer();
 
 #ifdef DEBUG
@@ -33,8 +28,6 @@ void before_ppos_init () {
 
 void after_ppos_init () {
     // put your customization here
-
-    globalClock = 0;
 
 #ifdef DEBUG
     printf("\ninit - AFTER");
@@ -74,7 +67,6 @@ void before_task_exit () {
 
 void after_task_exit () {
     // put your customization here
-    taskExec->activations++;
     printf("\nTask %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskExec->id, taskExec->life_time, taskExec->running_time, taskExec->activations);
 #ifdef DEBUG
     printf("\ntask_exit - AFTER- [%d]", taskExec->id);
@@ -89,7 +81,8 @@ void before_task_switch ( task_t *task ) {
 }
 
 void after_task_switch ( task_t *task ) {
-    // put your customization here
+    // put your customization 
+    task->activations++;
 #ifdef DEBUG
     printf("\ntask_switch - AFTER - [%d -> %d]", taskExec->id, task->id);
 #endif
@@ -459,12 +452,6 @@ task_t * scheduler() {
 
             aux = next;
         }
-
-        // incrementa a variável de ativações somente se a tarefa já passou pelo processador
-        if(readyQueue->running_time > 0)
-        {
-            readyQueue->activations++;
-        }
         
         // retorna a tarefa com menor tempo de execução restante
         return readyQueue;
@@ -518,7 +505,6 @@ void interrupt_handler()
     if((taskExec->current_processor_time == 20) && (taskExec->is_system_task == 0))
     {
         // coloca a tarefa na fila de prontas novamente
-
         taskExec->current_processor_time = 0;
         task_yield();
     }

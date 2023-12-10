@@ -23,6 +23,7 @@ typedef struct task_t
     struct task_t* joinQueue;
     int exitCode;
     unsigned int awakeTime; // used to store the time when it should be waked up
+    int awake_by_disk;
 
     // ... (outros campos deve ser adicionados APOS esse comentario)
     int is_system_task;

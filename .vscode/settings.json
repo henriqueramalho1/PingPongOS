@@ -3,6 +3,8 @@
         "ppos.h": "c",
         "ppos_data.h": "c",
         "stdio.h": "c",
-        "queue.h": "c"
+        "queue.h": "c",
+        "stdlib.h": "c",
+        "ppos-core-globals.h": "c"
     }
 }
