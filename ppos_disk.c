@@ -118,7 +118,7 @@ void disk_task_body()
         if(disk_duty_queue.head != NULL)
         {
             sem_down(&s);
-            disk_duty_t* duty = escalonate(2);
+            disk_duty_t* duty = escalonate(0);
             sem_up(&s);
             
             if(duty->operation == 0)
@@ -190,7 +190,7 @@ disk_duty_t* escalonate(int option)
     }
     else if(option == 1)
     {
-        printf("SSTF\n");
+        //printf("SSTF\n");
         int minor_distance = 9999;
 
         disk_duty_t* next_duty = NULL;
@@ -241,7 +241,7 @@ disk_duty_t* escalonate(int option)
     }
     else if(option == 2)
     {
-        printf("CSCAN\n");
+        //printf("CSCAN\n");
 
         int minor_distance = 9999;
 
